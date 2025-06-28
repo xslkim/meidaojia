@@ -1,17 +1,19 @@
 import time
 import threading
 import redis
+import uuid
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
+from config import QUEUE_NAME
 
 app = Flask(__name__)
 
 # 配置
-REDIS_HOST = '172.21.0.10'
-REDIS_PORT = 6379
-REDIS_DB = 0
-DEFAULT_TIMEOUT = 60  # 默认超时时间30秒
-MAX_WAIT = 300        # 最大等待时间300秒（5分钟）
+from config import REDIS_HOST
+from config import REDIS_PORT
+from config import REDIS_DB
+from config import DEFAULT_TIMEOUT
+from config import MAX_WAIT
 
 # 创建 Redis 连接池
 redis_pool = redis.ConnectionPool(
@@ -24,6 +26,43 @@ redis_pool = redis.ConnectionPool(
 def get_redis_conn():
     """获取 Redis 连接"""
     return redis.Redis(connection_pool=redis_pool)
+
+
+@app.route('/api/swapHair/v1', methods=['POST'])
+def api_swapHair_v1():
+    # 获取请求参数
+    data = request.get_json()
+    if not data or 'hair_id' not in data:
+        return jsonify({'error': 'Missing hair_id parameter'}), 400
+    if not data or 'task_id' not in data:
+        return jsonify({'error': 'Missing task_id parameter'}), 400
+    if not data or 'user_img_path' not in data:
+        return jsonify({'error': 'Missing user_img_path parameter'}), 400
+    if not data or 'is_hr' not in data:
+        return jsonify({'error': 'Missing is_hr parameter'}), 400
+
+    key = str(uuid.uuid4())
+    redis_conn = get_redis_conn()
+    task_data = {}
+    task_data['key'] = key
+    task_data['request'] = data
+    task_data_str = jsonify(task_data)
+    redis_conn.lpush(QUEUE_NAME, task_data_str)
+    timeout = 60
+    start_time = datetime.now()
+    result_key = f"result_{key}"
+    while (datetime.now() - start_time).seconds < timeout:
+        if redis_conn.exists(result_key):
+            result_str = redis_conn.get(result_key)
+            return result_str
+        time.sleep(0.1) 
+
+    return jsonify({
+            'status': 'timeout',
+            'message': f'Timeout after {timeout} seconds, http time out'
+        }), 408
+
+
 
 @app.route('/wait_for_success', methods=['POST'])
 def wait_for_success():
