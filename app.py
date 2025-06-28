@@ -1,0 +1,76 @@
+import time
+import threading
+import redis
+from flask import Flask, request, jsonify
+from datetime import datetime, timedelta
+
+app = Flask(__name__)
+
+# 配置
+REDIS_HOST = '172.21.0.15'
+REDIS_PORT = 6379
+REDIS_DB = 0
+DEFAULT_TIMEOUT = 30  # 默认超时时间30秒
+MAX_WAIT = 300        # 最大等待时间300秒（5分钟）
+
+# 创建 Redis 连接池
+redis_pool = redis.ConnectionPool(
+    host=REDIS_HOST, 
+    port=REDIS_PORT, 
+    db=REDIS_DB,
+    max_connections=500  # 根据实际情况调整
+)
+
+def get_redis_conn():
+    """获取 Redis 连接"""
+    return redis.Redis(connection_pool=redis_pool)
+
+@app.route('/wait_for_success', methods=['POST'])
+def wait_for_success():
+    # 获取请求参数
+    data = request.get_json()
+    if not data or 'key' not in data:
+        return jsonify({'error': 'Missing key parameter'}), 400
+    
+    key = data['key']
+    timeout = int(data.get('timeout', DEFAULT_TIMEOUT))
+    timeout = min(timeout, MAX_WAIT)  # 限制最大等待时间
+    
+    redis_conn = get_redis_conn()
+    start_time = datetime.now()
+    
+    # 检查 key 是否存在
+    if not redis_conn.exists(key):
+        return jsonify({'error': 'Key not found'}), 404
+    
+    # 初始检查
+    current_value = redis_conn.get(key)
+    if current_value and current_value.decode('utf-8') == 'success':
+        return jsonify({
+            'status': 'success',
+            'key': key,
+            'waited_seconds': 0
+        })
+    
+    # 设置发布/订阅
+    pubsub = redis_conn.pubsub()
+    pubsub.subscribe(f'channel:{key}')
+    
+    try:
+        # 等待通知或超时
+        while (datetime.now() - start_time).seconds < timeout:
+            # 非阻塞检查消息
+            message = pubsub.get_message(timeout=(timeout - (datetime.now() - start_time).seconds))
+            
+            # 检查当前值（防止错过通知）
+            current_value = redis_conn.get(key)
+            if current_value and current_value.decode('utf-8') == 'success':
+                return jsonify({
+                    'status': 'success',
+                    'key': key,
+                    'waited_seconds': (datetime.now() - start_time).seconds
+                })
+            
+            if message:
+                if message['type'] == 'message' and messag
+
