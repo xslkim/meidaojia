@@ -1,5 +1,5 @@
 import time
-import random
+import datetime
 import sys
 import redis
 import logging
@@ -11,10 +11,10 @@ from datetime import datetime
 from config import REDIS_HOST
 from config import REDIS_PORT
 from config import REDIS_DB
-from config import DEFAULT_TIMEOUT
-from config import MAX_WAIT
 from config import QUEUE_NAME
 from config import GPU_SERVER_LIST
+from config import SERVER_LOG_EVENT_LEN
+from config import SERVER_LOG_
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +33,34 @@ def get_redis_conn():
 
 redis_conn = get_redis_conn()
 
+def get_time():
+    # 假设有一个时间戳
+    timestamp = time.time()  # 当前时间戳
+
+    # 转换为UTC时间
+    utc_time = datetime.datetime.utcfromtimestamp(timestamp)
+
+    # 转换为北京时间 (UTC+8)
+    beijing_time = utc_time + datetime.timedelta(hours=8)
+
+    # 格式化输出
+    formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
+    return formatted_time
+
+def server_log_event(name, action, data):
+    server_log_str = redis_conn.get(name).decode("utf-8")
+    server_log = json.loads(server_log_str)
+    event = {}
+    event['time'] = time.time()
+    event['time_str'] = get_time(time.time())
+    event['action'] = action
+    event['data'] = data
+    if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
+        server_log['events'].pop(0)
+    server_log['events'].append(event)
+    server_log['last_event'] = event
+    server_log_str = json.dumps(server_log)
+    redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
 
 def registerGpuServer(name, url, can_use):
     try:
@@ -47,6 +75,22 @@ def registerGpuServer(name, url, can_use):
         server_str = json.dumps(server)
         logger.info(f"registerGpuServer, {server_str}")
         redis_conn.set(name, server_str)
+
+        server_log = {}
+        server_log['name'] = name
+        event = {}
+        event['time'] = time.time()
+        event['time_str'] = get_time(time.time())
+        event['action'] = "register"
+        event['data'] = "url"
+        server_log['last_event'] = event
+        server_log['events'] = []
+        if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
+            server_log['events'].pop(0)
+        server_log['events'].append(event)
+        server_log_str = json.dumps(server_log)
+        redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
+
         redis_conn.set(GPU_SERVER_LIST, json.dumps(server_list))
     except Exception as e:
         logger.error(f"registerGpuServer{e.message}")
@@ -88,20 +132,24 @@ def call_remote_gpu_server(task_data_str):
         server_str = json.dumps(server)
         redis_conn.set(name, server_str)
 
+        server_log_event(server['name'], "call", data)
         url = server['url']
         response = requests.post(url, headers=headers, json=data)
-        
+
         # release server
-        server['can_use'] = False
+        server['can_use'] = True
         server_str = json.dumps(server)
         redis_conn.set(name, server_str)
         
         result = response.json()
+        server_log_event(server['name'], "call result", result)
         result_str = json.dumps(result)
     else:
         result_str = json.dumps({
-            'status': 'timeout',
-            'message': f'Timeout after no gpu server'
+            "state":-1,
+            "data":"",
+            "task_id":task_data['request']["task_id"],
+            'msg': f'Timeout after no gpu server'
         })
     logger.info(f"call_remote_gpu_server {result_str}")
     result_key = f"result_{key}"
@@ -114,14 +162,9 @@ def main_worker():
             _, task_data_str = redis_conn.brpop(QUEUE_NAME, timeout=30)
             if task_data_str:
                 threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
-        except redis.exceptions.TimeoutError:
-            logger.info("No messages for 30 seconds, still alive...")
-        except redis.exceptions.RedisError as e:
-            logger.error(f"Redis error: {e}")
-            time.sleep(5)  # 等待后重试
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
-            time.sleep(5)
+            time.sleep(0.1)
 
 if __name__ == '__main__':
     import os
