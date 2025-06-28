@@ -34,40 +34,46 @@ def get_redis_conn():
 redis_conn = get_redis_conn()
 
 
-def registerGpuServer(name, url):
-    
-    if not redis_conn.exists(GPU_SERVER_LIST):
-        redis_conn.set(GPU_SERVER_LIST, "[]")
-    server_list = json.decoder(redis_conn.get(GPU_SERVER_LIST))
-    if name not in server_list:
-        server_list.add(name)
-    server = {}
-    server['name'] = name
-    server['url'] = url
-    server['is_idle'] = True
-    server_str = json.encoder(server)
-    logger.info(f"registerGpuServer, {server_str}")
-    redis_conn.set(name, server_str)
+def registerGpuServer(name, url, can_use):
+    try:
+        server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
+        server_list = json.loads(server_list_str)
+        if name not in server_list:
+            server_list.append(name)
+        server = {}
+        server['name'] = name
+        server['url'] = url
+        server['can_use'] = can_use
+        server_str = json.dumps(server)
+        logger.info(f"registerGpuServer, {server_str}")
+        redis_conn.set(name, server_str)
+        redis_conn.set(GPU_SERVER_LIST, json.dumps(server_list))
+    except Exception as e:
+        logger.error(f"registerGpuServer{e.message}")
 
-def registerGpuServer():
-    registerGpuServer("old_server", "http://js1.blockelite.cn:28559/api/swapHair/v1")
+def registerAllGpuServer():
+    redis_conn.set(GPU_SERVER_LIST, "[]")
+    registerGpuServer("old_server", "http://js1.blockelite.cn:28559/api/swapHair/v1", False)
+    registerGpuServer("test_server", "http://43.143.205.217:5000/api/swapHair/v1", True)
 
 def get_remote_gpu_server():
     logger.info(f"call get_remote_gpu_server")
     start_time = datetime.now()
     server_url = None
     while (datetime.now() - start_time).seconds < 20:
-        server_list = json.decoder(redis_conn.get(GPU_SERVER_LIST))
+        server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
+        server_list = json.loads(server_list_str)
         for name in server_list:
-            server = json.decoder(redis_conn.get(name))
-            if server['is_idel']:
+            server_str = redis_conn.get(name).decode("utf-8")
+            server = json.loads(server_str)
+            if server['can_use']:
                 return server['url']
         time.sleep(0.1)
     return server_url
 
 def call_remote_gpu_server(task_data_str):
-    task = json.loads(task_data_str)
-    key = task['key']
+    task_data = json.loads(task_data_str)
+    key = task_data['key']
     url = get_remote_gpu_server()
     result_str = ''
     if url:
@@ -75,16 +81,17 @@ def call_remote_gpu_server(task_data_str):
             'Content-Type': 'application/json'
         }
         data = {
-            "hair_id": task['hair_id'],
-            "task_id": task["task_id"],
-            "user_img_path": task['user_img_path'],
-            "is_hr": task['is_hr']
+            "hair_id": task_data['request']['hair_id'],
+            "task_id": task_data['request']["task_id"],
+            "user_img_path": task_data['request']['user_img_path'],
+            "is_hr": task_data['request']['is_hr']
         }
 
         response = requests.post(url, headers=headers, json=data)
-        result_str = response.json()
+        result = response.json()
+        result_str = json.dumps(result)
     else:
-        result_str = json.encoder({
+        result_str = json.dumps({
             'status': 'timeout',
             'message': f'Timeout after no gpu server'
         })
@@ -110,5 +117,5 @@ def main_worker():
 if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
-    registerGpuServer()
+    registerAllGpuServer()
     main_worker()

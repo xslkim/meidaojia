@@ -2,6 +2,7 @@ import time
 import threading
 import redis
 import uuid
+import json
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from config import QUEUE_NAME
@@ -46,7 +47,7 @@ def api_swapHair_v1():
     task_data = {}
     task_data['key'] = key
     task_data['request'] = data
-    task_data_str = jsonify(task_data)
+    task_data_str = json.dumps(task_data)
     redis_conn.lpush(QUEUE_NAME, task_data_str)
     timeout = 60
     start_time = datetime.now()
