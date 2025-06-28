@@ -51,15 +51,10 @@ def registerGpuServer(name, url, can_use):
     except Exception as e:
         logger.error(f"registerGpuServer{e.message}")
 
-def registerAllGpuServer():
-    redis_conn.set(GPU_SERVER_LIST, "[]")
-    registerGpuServer("old_server", "http://js1.blockelite.cn:28559/api/swapHair/v1", False)
-    registerGpuServer("test_server", "http://43.143.205.217:5000/api/swapHair/v1", True)
 
 def get_remote_gpu_server():
     logger.info(f"call get_remote_gpu_server")
     start_time = datetime.now()
-    server_url = None
     while (datetime.now() - start_time).seconds < 20:
         server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
         server_list = json.loads(server_list_str)
@@ -67,16 +62,16 @@ def get_remote_gpu_server():
             server_str = redis_conn.get(name).decode("utf-8")
             server = json.loads(server_str)
             if server['can_use']:
-                return server['url']
+                return server
         time.sleep(0.1)
-    return server_url
+    return None
 
 def call_remote_gpu_server(task_data_str):
     task_data = json.loads(task_data_str)
     key = task_data['key']
-    url = get_remote_gpu_server()
+    server = get_remote_gpu_server()
     result_str = ''
-    if url:
+    if server:
         headers = {
             'Content-Type': 'application/json'
         }
@@ -86,8 +81,21 @@ def call_remote_gpu_server(task_data_str):
             "user_img_path": task_data['request']['user_img_path'],
             "is_hr": task_data['request']['is_hr']
         }
+        name = server['name']
 
+        # set server busy
+        server['can_use'] = False
+        server_str = json.dumps(server)
+        redis_conn.set(name, server_str)
+
+        url = server['url']
         response = requests.post(url, headers=headers, json=data)
+        
+        # release server
+        server['can_use'] = False
+        server_str = json.dumps(server)
+        redis_conn.set(name, server_str)
+        
         result = response.json()
         result_str = json.dumps(result)
     else:
@@ -95,8 +103,9 @@ def call_remote_gpu_server(task_data_str):
             'status': 'timeout',
             'message': f'Timeout after no gpu server'
         })
+    logger.info(f"call_remote_gpu_server {result_str}")
     result_key = f"result_{key}"
-    redis_conn.set(result_key, result_str)
+    redis_conn.set(result_key, result_str, ex=60)
 
 def main_worker():
     while True:
@@ -117,5 +126,7 @@ def main_worker():
 if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
-    registerAllGpuServer()
+    redis_conn.set(GPU_SERVER_LIST, "[]")
+    registerGpuServer("old_server", "http://js1.blockelite.cn:28559/api/swapHair/v1", True)
+    registerGpuServer("test_server", "http://43.143.205.217:5000/api/swapHair/v1", False)
     main_worker()

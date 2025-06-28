@@ -34,13 +34,13 @@ def api_swapHair_v1():
     # 获取请求参数
     data = request.get_json()
     if not data or 'hair_id' not in data:
-        return jsonify({'error': 'Missing hair_id parameter'}), 400
+        return jsonify({'msg': 'Missing hair_id parameter', "state":-1, "data":"" }), 400
     if not data or 'task_id' not in data:
-        return jsonify({'error': 'Missing task_id parameter'}), 400
+        return jsonify({'msg': 'Missing task_id parameter', "state":-1, "data":""}), 400
     if not data or 'user_img_path' not in data:
-        return jsonify({'error': 'Missing user_img_path parameter'}), 400
+        return jsonify({'msg': 'Missing user_img_path parameter', "state":-1, "data":""}), 400
     if not data or 'is_hr' not in data:
-        return jsonify({'error': 'Missing is_hr parameter'}), 400
+        return jsonify({'msg': 'Missing is_hr parameter', "state":-1, "data":""}), 400
 
     key = str(uuid.uuid4())
     redis_conn = get_redis_conn()
@@ -55,12 +55,12 @@ def api_swapHair_v1():
     while (datetime.now() - start_time).seconds < timeout:
         if redis_conn.exists(result_key):
             result_str = redis_conn.get(result_key)
-            return result_str
+            return result_str, 200, {'Content-Type': 'application/json'}
         time.sleep(0.1) 
 
     return jsonify({
-            'status': 'timeout',
-            'message': f'Timeout after {timeout} seconds, http time out'
+            'msg': f'Timeout after {timeout} seconds, http time out'
+            , "state":-1, "data":""
         }), 408
 
 
