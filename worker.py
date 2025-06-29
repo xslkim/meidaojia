@@ -63,7 +63,7 @@ def get_time(timestamp):
     formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_time
 
-def server_log_event(name, action, log_data):
+def server_log_event(name, action, log_data, success=True):
     server_log_name = f"{SERVER_LOG_}{name}"
     server_log_str = redis_conn.get(server_log_name).decode("utf-8")
     server_log = json.loads(server_log_str)
@@ -79,6 +79,10 @@ def server_log_event(name, action, log_data):
     if 'state' in log_data:
         if log_data['state'] != 0:
             server_log['last_call'] = "failure"
+    
+    if not success:
+        server_log['last_call'] = "failure"
+
     event['data'] = log_data
     if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
         server_log['events'].pop(0)
@@ -160,7 +164,7 @@ def call_remote_gpu_server(task_data_str, server=None):
         server_str = json.dumps(server)
         redis_conn.set(name, server_str)
 
-        server_log_event(server['name'], "call", data)
+        server_log_event(server['name'], "call", data, True)
         url = server['url'] + task_data['api']
         response = requests.post(url, headers=headers, json=data, timeout=30)
 
@@ -168,10 +172,19 @@ def call_remote_gpu_server(task_data_str, server=None):
         server['can_use'] = True
         server_str = json.dumps(server)
         redis_conn.set(name, server_str)
-        
-        result = response.json()
-        server_log_event(server['name'], "call result", result)
-        result_str = json.dumps(result)
+        try:
+            result = response.json()
+            server_log_event(server['name'], "call result", result, True)
+            result_str = json.dumps(result)
+        except Exception as e:
+            server_log_event(server['name'], f"call result error {response.status_code}", result, False)
+            result_str = json.dumps({
+                "state":-1,
+                "data":"",
+                "task_id":task_data['request']["task_id"],
+                'msg': f'Timeout after no gpu server'
+            })
+
     else:
         result_str = json.dumps({
             "state":-1,
@@ -194,9 +207,9 @@ def check_server_work_call(server):
     task_data['request'] = request
     key = str(uuid.uuid4())
     task_data['key'] = key
-    task_data['api'] = "/api/uploadHair/v1"
+    task_data['api'] = "/api/swapHair/v1"
     task_data_str = json.dumps(task_data)
-    call_remote_gpu_server(task_data_str, server)
+    threading.Thread(target=call_remote_gpu_server, args=(task_data_str, server)).start()
 
 def check_server_work():
     server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
@@ -210,7 +223,7 @@ def check_server_work():
         server_log_name = f"{SERVER_LOG_}{name}"
         server_log_str = redis_conn.get(server_log_name).decode("utf-8")
         server_log = json.loads(server_log_str)
-        if time.time() - server_log['last_event']['time'] > (1*60):
+        if time.time() - server_log['last_event']['time'] > (5*60):
             logger.info("check_server_work and call name")
             check_server_work_call(server)
 
