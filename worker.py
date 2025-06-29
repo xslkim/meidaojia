@@ -233,7 +233,7 @@ def call_remote_gpu_server(task_data_str, server=None):
             "task_id":task_data['request']["task_id"],
             'msg': f'Timeout after no gpu server'
         })
-    logger.info(f"call_remote_gpu_server task:{task_data_str}  result:{result["state"]}")
+    logger.info(f"call_remote_gpu_server task:{task_data_str} ")
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
 
