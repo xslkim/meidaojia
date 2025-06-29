@@ -3,7 +3,7 @@ import logging
 import redis
 import uuid
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from datetime import datetime, timedelta
 from config import QUEUE_NAME, DEFAULT_TIMEOUT
 from flask_cors import CORS
@@ -68,6 +68,10 @@ def get_server_state():
 
     return jsonify(monitor_data), 200
 
+
+@monitor.route('/')
+def serve_index():
+    return send_from_directory('static', 'index.html')
 
 if __name__ == '__main__':
     # 启动Flask应用，启用多线程处理

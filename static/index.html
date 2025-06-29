@@ -272,7 +272,7 @@
             };
             
             // 连接状态 (3分钟判断)
-            const isNormal = (now - lastEventTime) < 180; // 3分钟=180秒
+            const isNormal = (now - lastEventTime) < (5*60 + 10);
             const connectStatus = {
                 status: isNormal ? 'normal' : 'error',
                 text: isNormal ? '正常' : '故障',
