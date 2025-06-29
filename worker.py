@@ -18,12 +18,25 @@ from config import SERVER_LOG_
 
 import logging
 
-logging.basicConfig(
-    filename='/var/log/meidaojia/worker.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# 创建 logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # 设置 logger 的级别
+
+# 创建文件 handler
+file_handler = logging.FileHandler('/var/log/meidaojia/worker.log')
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+
+# 创建控制台 handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+
+# 添加 handlers 到 logger
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
 
 # 创建 Redis 连接池
 redis_pool = redis.ConnectionPool(
@@ -139,7 +152,7 @@ def call_remote_gpu_server(task_data_str):
         redis_conn.set(name, server_str)
 
         server_log_event(server['name'], "call", data)
-        url = server['url']
+        url = server['url'] + task_data['api']
         response = requests.post(url, headers=headers, json=data)
 
         # release server
@@ -177,6 +190,6 @@ if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
-    registerGpuServer("old_server", "http://js1.blockelite.cn:28559/api/swapHair/v1", True)
-    registerGpuServer("test_server", "http://43.143.205.217:5000/api/swapHair/v1", False)
+    registerGpuServer("old_server", "http://js1.blockelite.cn:28559", True)
+    registerGpuServer("test_server", "http://43.143.205.217:5000", False)
     main_worker()
