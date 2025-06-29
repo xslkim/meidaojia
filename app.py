@@ -77,7 +77,7 @@ def api_hairColor_v2():
         return jsonify({'msg': 'Missing "ratio":  parameter', "state":-1, "data":""}), 400
     
     if not data or 'output_format' not in data:
-        logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
+        logger.warning(f"api_swapHair_v1 no output_format")
     
 
     key = str(uuid.uuid4())
