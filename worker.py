@@ -115,6 +115,7 @@ def registerGpuServer(name, url, can_use):
         event['data'] = f"url {url}"
         server_log['last_event'] = event
         server_log['events'] = []
+        server_log['last_call'] = "success"
         if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
             server_log['events'].pop(0)
         server_log['events'].append(event)
