@@ -51,11 +51,13 @@ get_redis_conn().set(QUEUE_NAME, "[]")
 
 def pushStr2Queue(str):
     redis_conn = get_redis_conn()
+    acquire_lock(redis_conn)
     task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
     task_queue = json.loads(task_queue_str)
     task_queue.append(str)
     task_queue_str = json.dumps(task_queue)
     redis_conn.set(QUEUE_NAME, task_queue_str)
+    release_lock(redis_conn)
     
 
 @app.route('/api/uploadHair/v1', methods=['POST'])
@@ -118,8 +120,12 @@ def api_swapHair_v1():
     if not data or 'output_format' not in data:
         logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
     
-    key = str(uuid.uuid4())
     redis_conn = get_redis_conn()
+    key = str(uuid.uuid4())
+    if len(data['user_img_path']) > 256:
+        redis_conn.set(f"img_{key}", data['user_img_path'], ex=60)
+        data['user_img_path'] = "base64"
+
     task_data = {}
     task_data['key'] = key
     task_data['api'] = "/api/swapHair/v1"

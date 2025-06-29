@@ -15,6 +15,7 @@ from config import QUEUE_NAME
 from config import GPU_SERVER_LIST
 from config import SERVER_LOG_EVENT_LEN
 from config import SERVER_LOG_
+from config import release_lock, acquire_lock
 
 import logging
 
@@ -172,6 +173,11 @@ def call_remote_gpu_server(task_data_str, server=None):
         try:
             logger.info(f"call get_remote_gpu_server {url}")
             start_ms = int(time.time() * 1000)  # 转换为毫秒级整数 
+
+            if data['user_img_path'] == 'base64':
+                imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
+                data['user_img_path'] = imgstr
+
             response = requests.post(url, headers=headers, json=data, timeout=30)
 
             result = response.json()
@@ -241,15 +247,21 @@ def check_server_work():
 
 def get_task_str():
     redis_conn = get_redis_conn()
+    acquire_lock(redis_conn)
     task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
     task_queue = json.loads(task_queue_str)
-    if(len(task_queue) > 0):
+    queue_len = len(task_queue)
+    if(queue_len > 0):
+        logger.info(f"get_task_str queue len:{queue_len}")
         str = task_queue.pop(0)
         task_queue_str = json.dumps(task_queue)
+        logger.info(f"get_task_str queue len:{len(task_queue)}")
         redis_conn.set(QUEUE_NAME, task_queue_str)
+        release_lock(redis_conn)
         return str
-    
-    return None
+    else:
+        release_lock(redis_conn)
+        return None
 
 def main_worker():
     while True:
@@ -269,8 +281,16 @@ if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
-    registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
-    registerGpuServer("test_server", "http://43.143.205.217:5000", False)
-    registerGpuServer("new_server1", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server2", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
+    # registerGpuServer("test_server", "http://43.143.205.217:5000", False)
+
+    registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
+    
+    
     main_worker()
