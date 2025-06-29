@@ -213,6 +213,14 @@
             background-color: rgba(231, 76, 60, 0.1);
             color: var(--color-error);
         }
+        .badge-success {
+            background-color: rgba(46, 204, 113, 0.1);
+            color: var(--color-normal);
+        }
+        .badge-failure {
+            background-color: rgba(231, 76, 60, 0.1);
+            color: var(--color-error);
+        }
     </style>
 </head>
 <body>
@@ -271,7 +279,7 @@
                 badgeClass: server.busy ? 'badge-busy' : 'badge-idle'
             };
             
-            // 连接状态 (3分钟判断)
+            // 连接状态 (5分钟判断)
             const isNormal = (now - lastEventTime) < (5*60 + 10);
             const connectStatus = {
                 status: isNormal ? 'normal' : 'error',
@@ -280,7 +288,16 @@
                 badgeClass: isNormal ? 'badge-normal' : 'badge-error'
             };
             
-            return { busyStatus, connectStatus };
+            // 上次运行状态
+            const hasLastCall = server.hasOwnProperty('last_call');
+            const lastCallStatus = {
+                status: hasLastCall && server.last_call === 'success' ? 'success' : 'failure',
+                text: hasLastCall && server.last_call === 'success' ? '成功' : '失败',
+                indicatorClass: hasLastCall && server.last_call === 'success' ? 'status-normal' : 'status-error',
+                badgeClass: hasLastCall && server.last_call === 'success' ? 'badge-success' : 'badge-failure'
+            };
+            
+            return { busyStatus, connectStatus, lastCallStatus };
         }
 
         // 创建服务器卡片
@@ -301,6 +318,10 @@
                     <div class="status-item">
                         <span class="status-indicator ${status.connectStatus.indicatorClass}"></span>
                         <span class="status-text">连接状态: <span class="status-badge ${status.connectStatus.badgeClass}">${status.connectStatus.text}</span></span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-indicator ${status.lastCallStatus.indicatorClass}"></span>
+                        <span class="status-text">上次运行: <span class="status-badge ${status.lastCallStatus.badgeClass}">${status.lastCallStatus.text}</span></span>
                     </div>
                     <div class="status-item">
                         <span class="last-update">最后活动: ${server.last_event?.time_str || '无记录'}</span>
