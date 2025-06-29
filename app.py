@@ -56,9 +56,59 @@ def pushStr2Queue(str):
     task_queue = json.loads(task_queue_str)
     task_queue.append(str)
     task_queue_str = json.dumps(task_queue)
+    logger.info(f"pushStr2Queue {task_queue_str}")
     redis_conn.set(QUEUE_NAME, task_queue_str)
     release_lock(redis_conn)
     
+
+
+
+@app.route('/hairColor/v2', methods=['POST'])
+def api_hairColor_v2():
+    # 获取请求参数
+    data = request.get_json()
+    if not data or 'img' not in data:
+        return jsonify({'msg': 'Missing img parameter', "state":-1, "data":"" }), 400
+    
+    if not data or 'rgb' not in data:
+        return jsonify({'msg': 'Missing "rgb":  parameter', "state":-1, "data":""}), 400
+    
+    if not data or 'ratio' not in data:
+        return jsonify({'msg': 'Missing "ratio":  parameter', "state":-1, "data":""}), 400
+    
+    if not data or 'output_format' not in data:
+        logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
+    
+
+    key = str(uuid.uuid4())
+    redis_conn = get_redis_conn()
+
+    if len(data['img']) > 256:
+        redis_conn.set(f"img_{key}", data['img'], ex=60)
+        data['img'] = "base64"
+    
+    task_data = {}
+    task_data['key'] = key
+    task_data['api'] = "/hairColor/v2"
+    task_data['request'] = data
+    task_data_str = json.dumps(task_data)
+    logger.info(f"request hairColor task_data: {task_data_str}")
+    pushStr2Queue(task_data_str)
+    timeout = DEFAULT_TIMEOUT
+    start_time = datetime.now()
+    result_key = f"result_{key}"
+    while (datetime.now() - start_time).seconds < timeout:
+        if redis_conn.exists(result_key):
+            result_str = redis_conn.get(result_key)
+            return result_str, 200, {'Content-Type': 'application/json'}
+        time.sleep(0.1) 
+
+    logger.error(f"request hairColor time out ")
+    return jsonify({
+            'msg': f'Timeout after {timeout} seconds, http time out'
+            , "state":-1, "data":""
+        }), 408
+
 
 @app.route('/api/uploadHair/v1', methods=['POST'])
 def api_uploadHair_v1():

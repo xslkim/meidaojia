@@ -16,6 +16,7 @@ from config import GPU_SERVER_LIST
 from config import SERVER_LOG_EVENT_LEN
 from config import SERVER_LOG_
 from config import release_lock, acquire_lock
+import copy
 
 import logging
 
@@ -64,7 +65,8 @@ def get_time(timestamp):
     formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_time
 
-def server_log_event(name, action, log_data, success=True):
+def server_log_event(name, action, in_data, success=True):
+    log_data = copy.deepcopy(in_data)
     server_log_name = f"{SERVER_LOG_}{name}"
     server_log_str = redis_conn.get(server_log_name).decode("utf-8")
     server_log = json.loads(server_log_str)
@@ -73,11 +75,7 @@ def server_log_event(name, action, log_data, success=True):
     event['time'] = t
     event['time_str'] = get_time(t)
     event['action'] = action
-    if 'data' in log_data:
-        imgstr = log_data['data']
-        imglen = len(imgstr)
-        if imglen > 256:
-            log_data['data'] = imgstr[:32]
+    
     server_log['last_call'] = "success"
     if 'state' in log_data:
         if log_data['state'] != 0:
@@ -85,6 +83,18 @@ def server_log_event(name, action, log_data, success=True):
     
     if not success:
         server_log['last_call'] = "failure"
+
+    if 'data' in log_data:
+        imgstr = log_data['data']
+        imglen = len(imgstr)
+        if imglen > 256:
+            log_data['data'] = imgstr[:32]
+
+    if 'result' in log_data:
+        imgstr = log_data['result']
+        imglen = len(imgstr)
+        if imglen > 256:
+            log_data['result'] = imgstr[:32]
 
     event['data'] = log_data
     if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
@@ -154,13 +164,22 @@ def call_remote_gpu_server(task_data_str, server=None):
         headers = {
             'Content-Type': 'application/json'
         }
-        data = {
-            "hair_id": task_data['request']['hair_id'],
-            "task_id": task_data['request']["task_id"],
-            "user_img_path": task_data['request']['user_img_path'],
-            "is_hr": task_data['request']['is_hr'],
-            "output_format":task_data['request']['output_format']
-        }
+        if 'hairColor' in task_data['api']:
+            data = {
+                "img": task_data['request']['img'],
+                "rgb": task_data['request']["rgb"],
+                "ratio": task_data['request']['ratio'],
+                "userId": task_data['request']['userId'],
+                "output_format":task_data['request']['output_format']
+            }
+        else:
+            data = {
+                "hair_id": task_data['request']['hair_id'],
+                "task_id": task_data['request']["task_id"],
+                "user_img_path": task_data['request']['user_img_path'],
+                "is_hr": task_data['request']['is_hr'],
+                "output_format":task_data['request']['output_format']
+            }
         name = server['name']
 
         # set server busy
@@ -174,9 +193,14 @@ def call_remote_gpu_server(task_data_str, server=None):
             logger.info(f"call get_remote_gpu_server {url}")
             start_ms = int(time.time() * 1000)  # 转换为毫秒级整数 
 
-            if data['user_img_path'] == 'base64':
-                imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
-                data['user_img_path'] = imgstr
+            if 'hairColor' in task_data['api']:
+                if data['img'] == 'base64':
+                    imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
+                    data['img'] = imgstr
+            else:
+                if data['user_img_path'] == 'base64':
+                    imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
+                    data['user_img_path'] = imgstr
 
             response = requests.post(url, headers=headers, json=data, timeout=30)
 
@@ -209,7 +233,7 @@ def call_remote_gpu_server(task_data_str, server=None):
             "task_id":task_data['request']["task_id"],
             'msg': f'Timeout after no gpu server'
         })
-    logger.info(f"call_remote_gpu_server task:{task_data_str}  result:{result_str}")
+    logger.info(f"call_remote_gpu_server task:{task_data_str}  result:{result["state"]}")
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
 

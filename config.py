@@ -13,16 +13,17 @@ TASK_REDIS_LOCK = 'TASK_REDIS_LOCK'
 
 def acquire_lock(r, acquire_timeout=10):
     """获取分布式锁"""
-    end = time.time() + acquire_timeout
-    while time.time() < end:
-        # 使用 SETNX 尝试获取锁
-        if r.setnx(TASK_REDIS_LOCK, 1):
-            # 设置过期时间，防止死锁
-            r.expire(TASK_REDIS_LOCK, 10)
-            return True
-        time.sleep(0.1)
-    return False
+    # end = time.time() + acquire_timeout
+    # while time.time() < end:
+    #     # 使用 SETNX 尝试获取锁
+    #     if r.setnx(TASK_REDIS_LOCK, 1):
+    #         # 设置过期时间，防止死锁
+    #         r.expire(TASK_REDIS_LOCK, 10)
+    #         return True
+    #     time.sleep(0.1)
+    # return False
+    return True
 
 def release_lock(r):
     """释放分布式锁"""
-    r.delete(TASK_REDIS_LOCK)
+    # r.delete(TASK_REDIS_LOCK)
