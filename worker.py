@@ -63,7 +63,7 @@ def get_time(timestamp):
     formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_time
 
-def server_log_event(name, action, data):
+def server_log_event(name, action, log_data):
     server_log_name = f"{SERVER_LOG_}{name}"
     server_log_str = redis_conn.get(server_log_name).decode("utf-8")
     server_log = json.loads(server_log_str)
@@ -72,7 +72,10 @@ def server_log_event(name, action, data):
     event['time'] = t
     event['time_str'] = get_time(t)
     event['action'] = action
-    event['data'] = data
+    if 'data' in log_data:
+        if len(log_data['data']) > 256:
+            log_data['data'] = log_data['result'][:32]
+    event['data'] = log_data
     if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
         server_log['events'].pop(0)
     server_log['events'].append(event)
@@ -142,7 +145,8 @@ def call_remote_gpu_server(task_data_str):
             "hair_id": task_data['request']['hair_id'],
             "task_id": task_data['request']["task_id"],
             "user_img_path": task_data['request']['user_img_path'],
-            "is_hr": task_data['request']['is_hr']
+            "is_hr": task_data['request']['is_hr'],
+            "output_format":task_data['request']['output_format']
         }
         name = server['name']
 
@@ -153,7 +157,7 @@ def call_remote_gpu_server(task_data_str):
 
         server_log_event(server['name'], "call", data)
         url = server['url'] + task_data['api']
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, timeout=30)
 
         # release server
         server['can_use'] = True
@@ -192,4 +196,5 @@ if __name__ == '__main__':
     redis_conn.set(GPU_SERVER_LIST, "[]")
     registerGpuServer("old_server", "http://js1.blockelite.cn:28559", True)
     registerGpuServer("test_server", "http://43.143.205.217:5000", False)
+    registerGpuServer("new_server", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", False)
     main_worker()
