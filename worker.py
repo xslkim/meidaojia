@@ -6,7 +6,7 @@ import logging
 import requests
 import threading
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config import REDIS_HOST
 from config import REDIS_PORT
@@ -33,26 +33,25 @@ def get_redis_conn():
 
 redis_conn = get_redis_conn()
 
-def get_time():
-    # 假设有一个时间戳
-    timestamp = time.time()  # 当前时间戳
-
+def get_time(timestamp):
     # 转换为UTC时间
-    utc_time = datetime.datetime.utcfromtimestamp(timestamp)
+    utc_time = datetime.utcfromtimestamp(timestamp)  
 
     # 转换为北京时间 (UTC+8)
-    beijing_time = utc_time + datetime.timedelta(hours=8)
+    beijing_time = utc_time + timedelta(hours=8)  # 正确
 
     # 格式化输出
     formatted_time = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_time
 
 def server_log_event(name, action, data):
-    server_log_str = redis_conn.get(name).decode("utf-8")
+    server_log_name = f"{SERVER_LOG_}{name}"
+    server_log_str = redis_conn.get(server_log_name).decode("utf-8")
     server_log = json.loads(server_log_str)
     event = {}
-    event['time'] = time.time()
-    event['time_str'] = get_time(time.time())
+    t = time.time()
+    event['time'] = t
+    event['time_str'] = get_time(t)
     event['action'] = action
     event['data'] = data
     if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
@@ -79,8 +78,9 @@ def registerGpuServer(name, url, can_use):
         server_log = {}
         server_log['name'] = name
         event = {}
-        event['time'] = time.time()
-        event['time_str'] = get_time(time.time())
+        t = time.time()
+        event['time'] = t 
+        event['time_str'] = get_time(t)
         event['action'] = "register"
         event['data'] = "url"
         server_log['last_event'] = event
