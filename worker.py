@@ -166,13 +166,9 @@ def call_remote_gpu_server(task_data_str, server=None):
 
         server_log_event(server['name'], "call", data, True)
         url = server['url'] + task_data['api']
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-
-        # release server
-        server['can_use'] = True
-        server_str = json.dumps(server)
-        redis_conn.set(name, server_str)
         try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+
             result = response.json()
             server_log_event(server['name'], "call result", result, True)
             result_str = json.dumps(result)
@@ -184,6 +180,11 @@ def call_remote_gpu_server(task_data_str, server=None):
                 "task_id":task_data['request']["task_id"],
                 'msg': f'Timeout after no gpu server'
             })
+
+        # release server
+        server['can_use'] = True
+        server_str = json.dumps(server)
+        redis_conn.set(name, server_str)
 
     else:
         result_str = json.dumps({
@@ -245,7 +246,7 @@ if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
-    registerGpuServer("old_server", "http://js1.blockelite.cn:28559", True)
-    registerGpuServer("test_server", "http://43.143.205.217:5000", False)
+    registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
+    registerGpuServer("test_server", "http://43.143.205.217:5000", True)
     registerGpuServer("new_server", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", False)
     main_worker()
