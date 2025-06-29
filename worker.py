@@ -73,8 +73,10 @@ def server_log_event(name, action, log_data, success=True):
     event['time_str'] = get_time(t)
     event['action'] = action
     if 'data' in log_data:
-        if len(log_data['data']) > 256:
-            log_data['data'] = log_data['result'][:32]
+        imgstr = log_data['data']
+        imglen = len(imgstr)
+        if imglen > 256:
+            log_data['data'] = imgstr[:32]
     server_log['last_call'] = "success"
     if 'state' in log_data:
         if log_data['state'] != 0:
@@ -168,20 +170,27 @@ def call_remote_gpu_server(task_data_str, server=None):
         server_log_event(server['name'], "call", data, True)
         url = server['url'] + task_data['api']
         try:
+            logger.info(f"call get_remote_gpu_server {url}")
+            start_ms = int(time.time() * 1000)  # 转换为毫秒级整数 
             response = requests.post(url, headers=headers, json=data, timeout=30)
 
             result = response.json()
+            end_ms = int(time.time() * 1000)
+            result['process_time_ms'] = (end_ms - start_ms)
             server_log_event(server['name'], "call result", result, True)
             result_str = json.dumps(result)
         except Exception as e:
-            server_log_event(server['name'], f"call result error {response.status_code}", result, False)
-            result_str = json.dumps({
+            logger.info(f"End call Exception {url}")
+            result = {
                 "state":-1,
                 "data":"",
                 "task_id":task_data['request']["task_id"],
-                'msg': f'Timeout after no gpu server'
-            })
+                'msg': f'Exception call call_remote_gpu_server{url}'
+            }
+            result_str = json.dumps(result)
+            server_log_event(server['name'], f"call result error {response.status_code}", result, False)
 
+        logger.info(f"End call {url}")
         # release server
         server['can_use'] = True
         server_str = json.dumps(server)
@@ -230,17 +239,30 @@ def check_server_work():
             check_server_work_call(server)
 
 
+def get_task_str():
+    redis_conn = get_redis_conn()
+    task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
+    task_queue = json.loads(task_queue_str)
+    if(len(task_queue) > 0):
+        str = task_queue.pop(0)
+        task_queue_str = json.dumps(task_queue)
+        redis_conn.set(QUEUE_NAME, task_queue_str)
+        return str
+    
+    return None
+
 def main_worker():
     while True:
         try:
             # _, task_data_str = redis_conn.brpop(QUEUE_NAME, timeout=30)
-            task_data_str = redis_conn.rpop(QUEUE_NAME)
+            # task_data_str = redis_conn.rpop(QUEUE_NAME)
+            task_data_str = get_task_str()
             if task_data_str:
                 threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
                 continue
         except Exception as e:
             logger.info(f"main_worker redis_conn.rpop(QUEUE_NAME): {e}")
-        check_server_work()
+        # check_server_work()
         time.sleep(0.1)
 
 if __name__ == '__main__':
@@ -248,6 +270,7 @@ if __name__ == '__main__':
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
     registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
-    registerGpuServer("test_server", "http://43.143.205.217:5000", True)
-    registerGpuServer("new_server", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", False)
+    registerGpuServer("test_server", "http://43.143.205.217:5000", False)
+    registerGpuServer("new_server1", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server2", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
     main_worker()

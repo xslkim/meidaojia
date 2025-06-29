@@ -5,7 +5,7 @@ import uuid
 import json
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from config import QUEUE_NAME, DEFAULT_TIMEOUT
+from config import QUEUE_NAME, DEFAULT_TIMEOUT, release_lock, acquire_lock
 
 # 创建 logger
 logger = logging.getLogger(__name__)
@@ -47,6 +47,17 @@ def get_redis_conn():
     """获取 Redis 连接"""
     return redis.Redis(connection_pool=redis_pool)
 
+get_redis_conn().set(QUEUE_NAME, "[]")
+
+def pushStr2Queue(str):
+    redis_conn = get_redis_conn()
+    task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
+    task_queue = json.loads(task_queue_str)
+    task_queue.append(str)
+    task_queue_str = json.dumps(task_queue)
+    redis_conn.set(QUEUE_NAME, task_queue_str)
+    
+
 @app.route('/api/uploadHair/v1', methods=['POST'])
 def api_uploadHair_v1():
     # 获取请求参数
@@ -68,14 +79,18 @@ def api_uploadHair_v1():
     task_data['request'] = data
     logger.info(f"request api_uploadHair_v1 task_data: {json.dumps(task_data)}")
     task_data_str = json.dumps(task_data)
-    redis_conn.lpush(QUEUE_NAME, task_data_str)
+    pushStr2Queue(task_data_str)
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
     while (datetime.now() - start_time).seconds < timeout:
         if redis_conn.exists(result_key):
             result_str = redis_conn.get(result_key)
-            return result_str, 200, {'Content-Type': 'application/json'}
+            result = json.loads(result_str)
+            if result['state'] == 0:
+                return jsonify(result), 200
+            else:
+                return jsonify(result), 500
         time.sleep(0.1) 
 
     logger.error(f"request api_uploadHair_v1 time out")
@@ -111,7 +126,7 @@ def api_swapHair_v1():
     task_data['request'] = data
     logger.info(f"request api_swapHair_v1 task_data: {json.dumps(task_data)}")
     task_data_str = json.dumps(task_data)
-    redis_conn.lpush(QUEUE_NAME, task_data_str)
+    pushStr2Queue(task_data_str)
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
