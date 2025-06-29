@@ -84,6 +84,8 @@ def api_uploadHair_v1():
 
 @app.route('/api/swapHair/v1', methods=['POST'])
 def api_swapHair_v1():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
     # 获取请求参数
     data = request.get_json()
     if not data or 'hair_id' not in data:
