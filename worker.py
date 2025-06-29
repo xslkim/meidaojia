@@ -1,6 +1,6 @@
 import time
 import datetime
-import sys
+import uuid
 import redis
 import logging
 import requests
@@ -75,6 +75,10 @@ def server_log_event(name, action, log_data):
     if 'data' in log_data:
         if len(log_data['data']) > 256:
             log_data['data'] = log_data['result'][:32]
+    server_log['last_call'] = "success"
+    if 'state' in log_data:
+        if log_data['state'] != 0:
+            server_log['last_call'] = "failure"
     event['data'] = log_data
     if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
         server_log['events'].pop(0)
@@ -104,7 +108,7 @@ def registerGpuServer(name, url, can_use):
         event['time'] = t 
         event['time_str'] = get_time(t)
         event['action'] = "register"
-        event['data'] = "url"
+        event['data'] = f"url {url}"
         server_log['last_event'] = event
         server_log['events'] = []
         if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
@@ -132,10 +136,11 @@ def get_remote_gpu_server():
         time.sleep(0.1)
     return None
 
-def call_remote_gpu_server(task_data_str):
+def call_remote_gpu_server(task_data_str, server=None):
     task_data = json.loads(task_data_str)
     key = task_data['key']
-    server = get_remote_gpu_server()
+    if server == None:
+        server = get_remote_gpu_server()
     result_str = ''
     if server:
         headers = {
@@ -178,17 +183,50 @@ def call_remote_gpu_server(task_data_str):
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
 
+def check_server_work_call(server):
+    task_data = {}
+    request = {}
+    request['hair_id'] = "1907651680352395265"
+    request['task_id'] = "1907651680352395265"
+    request['user_img_path'] = "https://cdn.meidaojia.com/ZoeFiles/user2_1_%E5%89%AF%E6%9C%AC.JPG"
+    request['output_format'] = "url"
+    request['is_hr'] = "false"
+    task_data['request'] = request
+    key = str(uuid.uuid4())
+    task_data['key'] = key
+    task_data['api'] = "/api/uploadHair/v1"
+    task_data_str = json.dumps(task_data)
+    call_remote_gpu_server(task_data_str, server)
+
+def check_server_work():
+    server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
+    server_list = json.loads(server_list_str)
+    for name in server_list:
+        server_str = redis_conn.get(name).decode("utf-8")
+        server = json.loads(server_str)
+        if not server['can_use']:
+            continue
+
+        server_log_name = f"{SERVER_LOG_}{name}"
+        server_log_str = redis_conn.get(server_log_name).decode("utf-8")
+        server_log = json.loads(server_log_str)
+        if time.time() - server_log['last_event']['time'] > (1*60):
+            logger.info("check_server_work and call name")
+            check_server_work_call(server)
+
+
 def main_worker():
     while True:
         try:
-            # 使用阻塞式弹出
-            _, task_data_str = redis_conn.brpop(QUEUE_NAME, timeout=30)
+            # _, task_data_str = redis_conn.brpop(QUEUE_NAME, timeout=30)
+            task_data_str = redis_conn.rpop(QUEUE_NAME)
             if task_data_str:
                 threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
+                continue
         except Exception as e:
-            logger.info(f"main_worker timeout redis_conn.brpop(QUEUE_NAME, timeout=30): {e}")
-        
-        time.sleep(0.01)
+            logger.info(f"main_worker redis_conn.rpop(QUEUE_NAME): {e}")
+        check_server_work()
+        time.sleep(0.1)
 
 if __name__ == '__main__':
     import os
