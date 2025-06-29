@@ -16,7 +16,13 @@ from config import GPU_SERVER_LIST
 from config import SERVER_LOG_EVENT_LEN
 from config import SERVER_LOG_
 
-logging.basicConfig(level=logging.INFO)
+import logging
+
+logging.basicConfig(
+    filename='/var/log/meidaojia/worker.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # 创建 Redis 连接池
@@ -151,7 +157,7 @@ def call_remote_gpu_server(task_data_str):
             "task_id":task_data['request']["task_id"],
             'msg': f'Timeout after no gpu server'
         })
-    logger.info(f"call_remote_gpu_server {result_str}")
+    logger.info(f"call_remote_gpu_server task:{task_data_str}  result:{result_str}")
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
 
@@ -163,8 +169,9 @@ def main_worker():
             if task_data_str:
                 threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            time.sleep(0.1)
+            logger.info(f"main_worker timeout redis_conn.brpop(QUEUE_NAME, timeout=30): {e}")
+        
+        time.sleep(0.01)
 
 if __name__ == '__main__':
     import os
