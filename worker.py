@@ -67,49 +67,66 @@ def get_time(timestamp):
     return formatted_time
 
 def server_log_event(name, action, in_data, success=True):
+    
     log_data = copy.deepcopy(in_data)
     server_log_name = f"{SERVER_LOG_}{name}"
 
-    lock = acquire_lock(redis_conn, server_log_name)
-    try:
-        server_log_str = redis_conn.get(server_log_name).decode("utf-8")
-        server_log = json.loads(server_log_str)
-        event = {}
-        t = time.time()
-        event['time'] = t
-        event['time_str'] = get_time(t)
-        event['action'] = action
-        
-        server_log['last_call'] = "success"
-        if 'state' in log_data:
-            if log_data['state'] != 0:
+    lock = acquire_lock(redis_conn, f"server_log_lock_{name}")
+    if lock:
+        try:
+            logger.info(f"server_log_event name:{name} action:{action} success:{success}")
+            server_log_str = redis_conn.get(server_log_name).decode("utf-8")
+            server_log = json.loads(server_log_str)
+            event = {}
+            t = time.time()
+            event['time'] = t
+            event['time_str'] = get_time(t)
+            event['action'] = action
+            
+            server_log['last_call'] = "success"
+            if 'state' in log_data:
+                if log_data['state'] != 0:
+                    server_log['last_call'] = "failure"
+            
+            if not success:
                 server_log['last_call'] = "failure"
-        
-        if not success:
-            server_log['last_call'] = "failure"
 
-        if 'data' in log_data:
-            imgstr = log_data['data']
-            imglen = len(imgstr)
-            if imglen > 256:
-                log_data['data'] = imgstr[:32]
+            if 'data' in log_data:
+                imgstr = log_data['data']
+                imglen = len(imgstr)
+                if imglen > 256:
+                    log_data['data'] = imgstr[:64]
 
-        if 'result' in log_data:
-            imgstr = log_data['result']
-            imglen = len(imgstr)
-            if imglen > 256:
-                log_data['result'] = imgstr[:32]
+            if 'img' in log_data:
+                imgstr = log_data['img']
+                imglen = len(imgstr)
+                if imglen > 256:
+                    log_data['img'] = imgstr[:64]
 
-        event['data'] = log_data
-        if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
-            server_log['events'].pop(0)
-        server_log['events'].append(event)
-        server_log['last_event'] = event
-        server_log_str = json.dumps(server_log)
-        redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
+            if 'result' in log_data:
+                imgstr = log_data['result']
+                imglen = len(imgstr)
+                if imglen > 256:
+                    log_data['result'] = imgstr[:64]
 
-    finally:
-        lock.release()
+            if 'user_img_path' in log_data:
+                imgstr = log_data['user_img_path']
+                imglen = len(imgstr)
+                if imglen > 256:
+                    log_data['user_img_path'] = imgstr[:32]
+
+            event['data'] = log_data
+            if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
+                server_log['events'].pop(0)
+            server_log['events'].append(event)
+            server_log['last_event'] = event
+            server_log_str = json.dumps(server_log)
+            redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
+
+        finally:
+            lock.release()
+    else:
+        logger.error(f"get lock none {server_log_name}")
 
 def registerGpuServer(name, url, can_use):
     try:
@@ -199,7 +216,7 @@ def call_remote_gpu_server(task_data_str, server=None):
         server_str = json.dumps(server)
         redis_conn.set(name, server_str)
 
-        server_log_event(server['name'], "call", data, True)
+        server_log_event(server['name'], "Request_GpuServer", data, True)
         url = server['url'] + task_data['api']
         try:
             logger.info(f"call get_remote_gpu_server {url}")
@@ -218,28 +235,38 @@ def call_remote_gpu_server(task_data_str, server=None):
             #         data['user_img_path'] = imgstr
 
             response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            logger.info(f"call finshed {response.status_code} {response.headers} {response.text[:128]}")
+            if response.status_code == 200:
+                result = response.json()
+                end_ms = int(time.time() * 1000)
+                if 'hairColor' in task_data['api']:
+                    if base64:
+                        result['result'] = f"data:image/jpeg;base64,{result['result']}"
+                else: 
+                    if base64:
+                        result['data'] = f"data:image/jpeg;base64,{result['data']}"
 
-            result = response.json()
-            end_ms = int(time.time() * 1000)
-            if 'hairColor' in task_data['api']:
-                if base64:
-                    result['result'] = f"data:image/jpeg;base64,{result['result']}"
+                result['process_time_ms'] = (end_ms - start_ms)
+                server_log_event(server['name'], "GpuServer_Response", result, True)
+                result_str = json.dumps(result)
             else:
-                if base64:
-                    result['data'] = f"data:image/jpeg;base64,{result['data']}"
-
-            result['process_time_ms'] = (end_ms - start_ms)
-            server_log_event(server['name'], "call result", result, True)
-            result_str = json.dumps(result)
+                result = {
+                    "state":-1,
+                    "data":"",
+                    'msg': f'Exception call call_remote_gpu_server{url} {response.text}'
+                }
+                result_str = json.dumps(result)
+                server_log_event(server['name'], f"error GpuServer_Response ", result, False)
         except Exception as e:
-            logger.info(f"End call Exception {url}")
+            logger.info(f"End call Exception {url} {type(e).__name__}, 错误信息: {e}")
             result = {
                 "state":-1,
                 "data":"",
                 'msg': f'Exception call call_remote_gpu_server{url}'
             }
             result_str = json.dumps(result)
-            server_log_event(server['name'], f"call result error", result, False)
+            server_log_event(server['name'], f"error GpuServer_Response ", result, False)
 
         logger.info(f"End call {url}")
         # release server
@@ -335,12 +362,19 @@ if __name__ == '__main__':
     # registerGpuServer("test_server", "http://43.143.205.217:5000", False)
 
     registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
     
+    registerGpuServer("new_server11_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server12_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server13_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server14_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server15_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server16_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server17_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
     
     main_worker()
