@@ -5,7 +5,7 @@ import uuid
 import json
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from config import QUEUE_NAME, DEFAULT_TIMEOUT, release_lock, acquire_lock
+from config import QUEUE_NAME, DEFAULT_TIMEOUT, KEY_QUEUE_LOCK_NAME, acquire_lock
 
 # 创建 logger
 logger = logging.getLogger(__name__)
@@ -49,16 +49,22 @@ def get_redis_conn():
 
 get_redis_conn().set(QUEUE_NAME, "[]")
 
-def pushStr2Queue(str):
+def pushStr2Queue(key, data_str):
     redis_conn = get_redis_conn()
-    acquire_lock(redis_conn)
-    task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
-    task_queue = json.loads(task_queue_str)
-    task_queue.append(str)
-    task_queue_str = json.dumps(task_queue)
-    logger.info(f"pushStr2Queue {task_queue_str}")
-    redis_conn.set(QUEUE_NAME, task_queue_str)
-    release_lock(redis_conn)
+    lock = acquire_lock(redis_conn, KEY_QUEUE_LOCK_NAME)
+    if lock:
+        try:
+            redis_conn.set(key, data_str)
+            key_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
+            key_queue = json.loads(key_queue_str)
+            key_queue.append(key)
+            logger.info(f"pushStr2Queue queue len:{key_queue}")
+            key_queue_str = json.dumps(key_queue)
+            redis_conn.set(QUEUE_NAME, key_queue_str)
+        finally:
+            lock.release()
+    else:
+        logger.error(f"pushStr2Queue get lock error {data_str}")
     
 
 
@@ -77,23 +83,23 @@ def api_hairColor_v2():
         return jsonify({'msg': 'Missing "ratio":  parameter', "state":-1, "data":""}), 400
     
     if not data or 'output_format' not in data:
-        logger.warning(f"api_swapHair_v1 no output_format")
+        return jsonify({'msg': 'Missing "output_format":  parameter', "state":-1, "data":""}), 400
     
 
     key = str(uuid.uuid4())
     redis_conn = get_redis_conn()
 
-    if len(data['img']) > 256:
-        redis_conn.set(f"img_{key}", data['img'], ex=60)
-        data['img'] = "base64"
+    # if len(data['img']) > 256:
+    #     redis_conn.set(f"img_{key}", data['img'], ex=60)
+    #     data['img'] = "base64"
     
     task_data = {}
     task_data['key'] = key
     task_data['api'] = "/hairColor/v2"
     task_data['request'] = data
+    logger.info(f"request hairColor/v2 img:{data['img'][:64]}, rgb:{data['rgb']}, ratio:{data['ratio']} output_format:{data['output_format']}")
     task_data_str = json.dumps(task_data)
-    logger.info(f"request hairColor task_data: {task_data_str}")
-    pushStr2Queue(task_data_str)
+    pushStr2Queue(key, task_data_str)
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
@@ -104,48 +110,6 @@ def api_hairColor_v2():
         time.sleep(0.1) 
 
     logger.error(f"request hairColor time out ")
-    return jsonify({
-            'msg': f'Timeout after {timeout} seconds, http time out'
-            , "state":-1, "data":""
-        }), 408
-
-
-@app.route('/api/uploadHair/v1', methods=['POST'])
-def api_uploadHair_v1():
-    # 获取请求参数
-    data = request.get_json()
-    if not data or 'img_lists' not in data:
-        return jsonify({'msg': 'Missing img_lists parameter', "state":-1, "data":"" }), 400
-    if not data or '"hair_id": ' not in data:
-        return jsonify({'msg': 'Missing "hair_id":  parameter', "state":-1, "data":""}), 400
-    
-    if not data or 'output_format' not in data:
-        logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
-    
-
-    key = str(uuid.uuid4())
-    redis_conn = get_redis_conn()
-    task_data = {}
-    task_data['key'] = key
-    task_data['api'] = "/api/uploadHair/v1"
-    task_data['request'] = data
-    logger.info(f"request api_uploadHair_v1 task_data: {json.dumps(task_data)}")
-    task_data_str = json.dumps(task_data)
-    pushStr2Queue(task_data_str)
-    timeout = DEFAULT_TIMEOUT
-    start_time = datetime.now()
-    result_key = f"result_{key}"
-    while (datetime.now() - start_time).seconds < timeout:
-        if redis_conn.exists(result_key):
-            result_str = redis_conn.get(result_key)
-            result = json.loads(result_str)
-            if result['state'] == 0:
-                return jsonify(result), 200
-            else:
-                return jsonify(result), 500
-        time.sleep(0.1) 
-
-    logger.error(f"request api_uploadHair_v1 time out")
     return jsonify({
             'msg': f'Timeout after {timeout} seconds, http time out'
             , "state":-1, "data":""
@@ -168,21 +132,24 @@ def api_swapHair_v1():
         return jsonify({'msg': 'Missing is_hr parameter', "state":-1, "data":""}), 400
     
     if not data or 'output_format' not in data:
-        logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
+        return jsonify({'msg': 'Missing output_format parameter', "state":-1, "data":""}), 400
     
     redis_conn = get_redis_conn()
     key = str(uuid.uuid4())
-    if len(data['user_img_path']) > 256:
-        redis_conn.set(f"img_{key}", data['user_img_path'], ex=60)
-        data['user_img_path'] = "base64"
+
+    # if len(data['user_img_path']) > 256:
+    #     redis_conn.set(f"img_{key}", data['user_img_path'], ex=60)
+    #     data['user_img_path'] = "base64"
 
     task_data = {}
     task_data['key'] = key
     task_data['api'] = "/api/swapHair/v1"
     task_data['request'] = data
-    logger.info(f"request api_swapHair_v1 task_data: {json.dumps(task_data)}")
+
+    logger.info(f"request /api/swapHair/v1 user_img_path:{data['user_img_path'][:64]}  hair_id:{data['hair_id']}")
+
     task_data_str = json.dumps(task_data)
-    pushStr2Queue(task_data_str)
+    pushStr2Queue(key, task_data_str)
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
@@ -192,11 +159,54 @@ def api_swapHair_v1():
             return result_str, 200, {'Content-Type': 'application/json'}
         time.sleep(0.1) 
 
-    logger.error(f"request api_swapHair_v1 time out {data['task_id']}")
+    logger.error(f"request /api/swapHair/v1 time out")
     return jsonify({
             'msg': f'Timeout after {timeout} seconds, http time out'
             , "state":-1, "data":""
         }), 408
+
+
+
+# @app.route('/api/uploadHair/v1', methods=['POST'])
+# def api_uploadHair_v1():
+#     # 获取请求参数
+#     data = request.get_json()
+#     if not data or 'img_lists' not in data:
+#         return jsonify({'msg': 'Missing img_lists parameter', "state":-1, "data":"" }), 400
+#     if not data or '"hair_id": ' not in data:
+#         return jsonify({'msg': 'Missing "hair_id":  parameter', "state":-1, "data":""}), 400
+    
+#     if not data or 'output_format' not in data:
+#         logger.warning(f"api_swapHair_v1 no output_format task_id:{data['task_id']}")
+    
+
+#     key = str(uuid.uuid4())
+#     redis_conn = get_redis_conn()
+#     task_data = {}
+#     task_data['key'] = key
+#     task_data['api'] = "/api/uploadHair/v1"
+#     task_data['request'] = data
+#     logger.info(f"request api_uploadHair_v1 task_data: {json.dumps(task_data)}")
+#     task_data_str = json.dumps(task_data)
+#     pushStr2Queue(task_data_str)
+#     timeout = DEFAULT_TIMEOUT
+#     start_time = datetime.now()
+#     result_key = f"result_{key}"
+#     while (datetime.now() - start_time).seconds < timeout:
+#         if redis_conn.exists(result_key):
+#             result_str = redis_conn.get(result_key)
+#             result = json.loads(result_str)
+#             if result['state'] == 0:
+#                 return jsonify(result), 200
+#             else:
+#                 return jsonify(result), 500
+#         time.sleep(0.1) 
+
+#     logger.error(f"request api_uploadHair_v1 time out")
+#     return jsonify({
+#             'msg': f'Timeout after {timeout} seconds, http time out'
+#             , "state":-1, "data":""
+#         }), 408
 
 
 if __name__ == '__main__':

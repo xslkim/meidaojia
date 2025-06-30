@@ -15,7 +15,8 @@ from config import QUEUE_NAME
 from config import GPU_SERVER_LIST
 from config import SERVER_LOG_EVENT_LEN
 from config import SERVER_LOG_
-from config import release_lock, acquire_lock
+from config import GPU_SERVER_TIME_OUT
+from config import KEY_QUEUE_LOCK_NAME, acquire_lock, SERVER_LIST_LOCK_NAME, SERVER_LIST_LOG_LOCK_NAME
 import copy
 
 import logging
@@ -68,41 +69,47 @@ def get_time(timestamp):
 def server_log_event(name, action, in_data, success=True):
     log_data = copy.deepcopy(in_data)
     server_log_name = f"{SERVER_LOG_}{name}"
-    server_log_str = redis_conn.get(server_log_name).decode("utf-8")
-    server_log = json.loads(server_log_str)
-    event = {}
-    t = time.time()
-    event['time'] = t
-    event['time_str'] = get_time(t)
-    event['action'] = action
-    
-    server_log['last_call'] = "success"
-    if 'state' in log_data:
-        if log_data['state'] != 0:
+
+    lock = acquire_lock(redis_conn, server_log_name)
+    try:
+        server_log_str = redis_conn.get(server_log_name).decode("utf-8")
+        server_log = json.loads(server_log_str)
+        event = {}
+        t = time.time()
+        event['time'] = t
+        event['time_str'] = get_time(t)
+        event['action'] = action
+        
+        server_log['last_call'] = "success"
+        if 'state' in log_data:
+            if log_data['state'] != 0:
+                server_log['last_call'] = "failure"
+        
+        if not success:
             server_log['last_call'] = "failure"
-    
-    if not success:
-        server_log['last_call'] = "failure"
 
-    if 'data' in log_data:
-        imgstr = log_data['data']
-        imglen = len(imgstr)
-        if imglen > 256:
-            log_data['data'] = imgstr[:32]
+        if 'data' in log_data:
+            imgstr = log_data['data']
+            imglen = len(imgstr)
+            if imglen > 256:
+                log_data['data'] = imgstr[:32]
 
-    if 'result' in log_data:
-        imgstr = log_data['result']
-        imglen = len(imgstr)
-        if imglen > 256:
-            log_data['result'] = imgstr[:32]
+        if 'result' in log_data:
+            imgstr = log_data['result']
+            imglen = len(imgstr)
+            if imglen > 256:
+                log_data['result'] = imgstr[:32]
 
-    event['data'] = log_data
-    if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
-        server_log['events'].pop(0)
-    server_log['events'].append(event)
-    server_log['last_event'] = event
-    server_log_str = json.dumps(server_log)
-    redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
+        event['data'] = log_data
+        if(len(server_log['events']) > SERVER_LOG_EVENT_LEN):
+            server_log['events'].pop(0)
+        server_log['events'].append(event)
+        server_log['last_event'] = event
+        server_log_str = json.dumps(server_log)
+        redis_conn.set(f"{SERVER_LOG_}{name}", server_log_str)
+
+    finally:
+        lock.release()
 
 def registerGpuServer(name, url, can_use):
     try:
@@ -141,17 +148,20 @@ def registerGpuServer(name, url, can_use):
 
 
 def get_remote_gpu_server():
-    logger.info(f"call get_remote_gpu_server")
     start_time = datetime.now()
-    while (datetime.now() - start_time).seconds < 20:
-        server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
-        server_list = json.loads(server_list_str)
-        for name in server_list:
-            server_str = redis_conn.get(name).decode("utf-8")
-            server = json.loads(server_str)
-            if server['can_use']:
-                return server
-        time.sleep(0.1)
+    while (datetime.now() - start_time).seconds < GPU_SERVER_TIME_OUT:
+        lock = acquire_lock(redis_conn, SERVER_LIST_LOCK_NAME)
+        try:
+            server_list_str = redis_conn.get(GPU_SERVER_LIST).decode("utf-8")
+            server_list = json.loads(server_list_str)
+            for name in server_list:
+                server_str = redis_conn.get(name).decode("utf-8")
+                server = json.loads(server_str)
+                if server['can_use']:
+                    return server
+        finally:
+            lock.release()
+        time.sleep(0.2)
     return None
 
 def call_remote_gpu_server(task_data_str, server=None):
@@ -159,6 +169,7 @@ def call_remote_gpu_server(task_data_str, server=None):
     key = task_data['key']
     if server == None:
         server = get_remote_gpu_server()
+
     result_str = ''
     if server:
         headers = {
@@ -197,14 +208,14 @@ def call_remote_gpu_server(task_data_str, server=None):
             if data['output_format'] == 'base64':
                 base64 = True
 
-            if 'hairColor' in task_data['api']:
-                if data['img'] == 'base64':
-                    imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
-                    data['img'] = imgstr
-            else:
-                if data['user_img_path'] == 'base64':
-                    imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
-                    data['user_img_path'] = imgstr
+            # if 'hairColor' in task_data['api']:
+            #     if data['img'] == 'base64':
+            #         imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
+            #         data['img'] = imgstr
+            # else:
+            #     if data['user_img_path'] == 'base64':
+            #         imgstr = redis_conn.get(f"img_{key}").decode("utf-8")
+            #         data['user_img_path'] = imgstr
 
             response = requests.post(url, headers=headers, json=data, timeout=30)
 
@@ -240,10 +251,9 @@ def call_remote_gpu_server(task_data_str, server=None):
         result_str = json.dumps({
             "state":-1,
             "data":"",
-            "task_id":task_data['request']["task_id"],
-            'msg': f'Timeout after no gpu server'
+            'msg': f'Timeout after all gpu server is busy'
         })
-    logger.info(f"call_remote_gpu_server task:{task_data_str} ")
+    
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
 
@@ -279,35 +289,41 @@ def check_server_work():
             check_server_work_call(server)
 
 
-def get_task_str():
+def get_task_queue_key():
     redis_conn = get_redis_conn()
-    acquire_lock(redis_conn)
-    task_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
-    task_queue = json.loads(task_queue_str)
-    queue_len = len(task_queue)
-    if(queue_len > 0):
-        logger.info(f"get_task_str queue len:{queue_len}")
-        str = task_queue.pop(0)
-        task_queue_str = json.dumps(task_queue)
-        logger.info(f"get_task_str queue len:{len(task_queue)}")
-        redis_conn.set(QUEUE_NAME, task_queue_str)
-        release_lock(redis_conn)
-        return str
-    else:
-        release_lock(redis_conn)
-        return None
+    lock = acquire_lock(redis_conn, KEY_QUEUE_LOCK_NAME)
+    if not lock:
+        logger.error("get_task_queue_key get lock error")
+        return
+    try:
+        key_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
+        key_queue = json.loads(key_queue_str)
+        queue_len = len(key_queue)
+        if(queue_len > 0):
+            logger.info(f"get_task_queue_key queue len:{queue_len}")
+            key = key_queue.pop(0)
+            key_queue_str = json.dumps(key_queue)
+            logger.info(f"get_task_queue_key queue len:{len(key_queue)}")
+            redis_conn.set(QUEUE_NAME, key_queue_str)
+            return key
+        else:
+            return None
+    finally:
+        lock.release()
 
 def main_worker():
     while True:
         try:
-            # _, task_data_str = redis_conn.brpop(QUEUE_NAME, timeout=30)
-            # task_data_str = redis_conn.rpop(QUEUE_NAME)
-            task_data_str = get_task_str()
-            if task_data_str:
-                threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
+            key = get_task_queue_key()
+            if key:
+                task_data_str = redis_conn.get(key)
+                if task_data_str:
+                    threading.Thread(target=call_remote_gpu_server, args=(task_data_str,)).start()
+                else:
+                    logging.error(f"main_worker get task_data_str error with key{key}")
                 continue
         except Exception as e:
-            logger.info(f"main_worker redis_conn.rpop(QUEUE_NAME): {e}")
+            logger.info(f"main_worker  {e}")
         # check_server_work()
         time.sleep(0.1)
 
