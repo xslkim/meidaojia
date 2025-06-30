@@ -164,6 +164,7 @@ def call_remote_gpu_server(task_data_str, server=None):
         headers = {
             'Content-Type': 'application/json'
         }
+
         if 'hairColor' in task_data['api']:
             data = {
                 "img": task_data['request']['img'],
@@ -192,6 +193,9 @@ def call_remote_gpu_server(task_data_str, server=None):
         try:
             logger.info(f"call get_remote_gpu_server {url}")
             start_ms = int(time.time() * 1000)  # 转换为毫秒级整数 
+            base64 = False
+            if data['output_format'] == 'base64':
+                base64 = True
 
             if 'hairColor' in task_data['api']:
                 if data['img'] == 'base64':
@@ -206,6 +210,13 @@ def call_remote_gpu_server(task_data_str, server=None):
 
             result = response.json()
             end_ms = int(time.time() * 1000)
+            if 'hairColor' in task_data['api']:
+                if base64:
+                    result['result'] = f"data:image/jpeg;base64,{result['result']}"
+            else:
+                if base64:
+                    result['data'] = f"data:image/jpeg;base64,{result['data']}"
+
             result['process_time_ms'] = (end_ms - start_ms)
             server_log_event(server['name'], "call result", result, True)
             result_str = json.dumps(result)
@@ -214,11 +225,10 @@ def call_remote_gpu_server(task_data_str, server=None):
             result = {
                 "state":-1,
                 "data":"",
-                "task_id":task_data['request']["task_id"],
                 'msg': f'Exception call call_remote_gpu_server{url}'
             }
             result_str = json.dumps(result)
-            server_log_event(server['name'], f"call result error {response.status_code}", result, False)
+            server_log_event(server['name'], f"call result error", result, False)
 
         logger.info(f"End call {url}")
         # release server
