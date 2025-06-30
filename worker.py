@@ -254,7 +254,7 @@ def call_remote_gpu_server(task_data_str, server=None):
                 result = {
                     "state":-1,
                     "data":"",
-                    'msg': f'Exception call call_remote_gpu_server{url} {response.text}'
+                    'msg': f'status_code error{response.status_code} call_remote_gpu_server{url} {response.text}'
                 }
                 result_str = json.dumps(result)
                 server_log_event(server['name'], f"error GpuServer_Response ", result, False)
@@ -361,20 +361,14 @@ if __name__ == '__main__':
     # registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
     # registerGpuServer("test_server", "http://43.143.205.217:5000", False)
 
-    registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
+    # # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
+    # # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
     
-    registerGpuServer("new_server11_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server12_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server13_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server14_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server15_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server16_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server17_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
+
     
     main_worker()
