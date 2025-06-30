@@ -283,7 +283,7 @@
             const isNormal = (now - lastEventTime) < (5*60 + 10);
             const connectStatus = {
                 status: isNormal ? 'normal' : 'error',
-                text: isNormal ? '正常' : '故障',
+                text: isNormal ? '活跃' : '不活跃',
                 indicatorClass: isNormal ? 'status-normal' : 'status-error',
                 badgeClass: isNormal ? 'badge-normal' : 'badge-error'
             };
@@ -317,7 +317,7 @@
                     </div>
                     <div class="status-item">
                         <span class="status-indicator ${status.connectStatus.indicatorClass}"></span>
-                        <span class="status-text">连接状态: <span class="status-badge ${status.connectStatus.badgeClass}">${status.connectStatus.text}</span></span>
+                        <span class="status-text">活跃状态: <span class="status-badge ${status.connectStatus.badgeClass}">${status.connectStatus.text}</span></span>
                     </div>
                     <div class="status-item">
                         <span class="status-indicator ${status.lastCallStatus.indicatorClass}"></span>

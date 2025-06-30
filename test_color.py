@@ -2,6 +2,8 @@ import threading
 import requests
 import json
 import base64
+import time
+import random
 
 
 url = 'http://mq.aidigifi.meidaojia.com/hairColor/v2'
@@ -60,14 +62,16 @@ def send_request():
     try:
         response = requests.post(url, headers=headers, json=data)
         with lock:  # 加锁，防止多线程同时修改 responses
-            responses.append(response.json())
+            responses.append(response)
     except Exception as e:
         with lock:
             responses.append({"error": str(e)})
 
 # 创建并启动多个线程
 threads = []
-num_requests = 1  # 并发请求数量
+num_requests = 10  # 并发请求数量
+
+time_start = time.time()
 
 for _ in range(num_requests):
     t = threading.Thread(target=send_request)
@@ -78,6 +82,12 @@ for _ in range(num_requests):
 for t in threads:
     t.join()
 
+end_time = time.time()
+
+total_time = (end_time - time_start)
+qps = num_requests/total_time
+print(qps)
+
 # 打印所有响应
 for i, resp in enumerate(responses, 1):
-    print(f"请求 {i} 结果:", resp)
+    print(f"请求 {i} 结果:", {resp.status_code, resp.text[:128]})

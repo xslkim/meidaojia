@@ -65,8 +65,9 @@ def get_server_state():
         server_log = json.loads(server_log_str)
         server_log['busy'] = not server['can_use']
         monitor_data.append(server_log)
-
-    return jsonify(monitor_data), 200
+    json_str = json.dumps(monitor_data)
+    print(len(json_str))
+    return json_str, 200
 
 
 @monitor.route('/')

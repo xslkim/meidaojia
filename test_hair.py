@@ -2,16 +2,80 @@ import threading
 import requests
 import json
 import base64
+import time
+import random
 
 url = 'http://mq.aidigifi.meidaojia.com/api/swapHair/v1'
+# url = 'https://692524911165445-http-8801.northwest1.gpugeek.com:8443/api/swapHair/v1'
+# url = 'https://692502023221253-http-8801.northwest1.gpugeek.com:8443/api/swapHair/v1'
+# url = 'https://692493464571909-http-8801.northwest1.gpugeek.com:8443/api/swapHair/v1'
 headers = {'Content-Type': 'application/json'}
 data = {
     "hair_id": "1907651680352395265",
     "task_id": "1907651680352395265",
     "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/user2_1_%E5%89%AF%E6%9C%AC.JPG",
+    # "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_8.JPG",
     "is_hr": "false",
     "output_format": "base64"
 }
+
+more_data = []
+more_data.append(data)
+
+data1 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "2345623451234",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_8.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data1)
+
+data2 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "3145645324",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_7.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data2)
+
+data3 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "456412345",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_6.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data3)
+
+data4 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "45623445",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_5.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data4)
+
+data5 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "2345867435",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_4.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data5)
+
+
+data6 = {
+    "hair_id": "1907651680352395265",
+    "task_id": "86747535",
+    "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/testuser_3.JPG",
+    "is_hr": "false",
+    "output_format": "base64"
+}
+more_data.append(data6)
 
 def image_to_base64(file_path, mime_type=None):
     """
@@ -54,22 +118,34 @@ responses = []
 lock = threading.Lock()
 
 
-def send_request():
+send_index = 0
+
+def send_request(start_time):
     try:
-        response = requests.post(url, headers=headers, json=data)
-        jj = response.json()
+        sleep_time = start_time #random.uniform(0, 2)  # 生成 [0, 2) 之间的随机浮点数
+        time.sleep(sleep_time)
+        global send_index
+        send_data = more_data[send_index]
+        # send_index = send_index + 1
+        send_data['task_id'] = str(int(random.uniform(0, 10000000)))
+        response = requests.post(url, headers=headers, json=send_data)
         with lock:  # 加锁，防止多线程同时修改 responses
-            responses.append(jj)
+            responses.append(response)
     except Exception as e:
         with lock:
             responses.append({"error": str(e)})
 
 # 创建并启动多个线程
 threads = []
-num_requests = 1  # 并发请求数量
+num_requests = 80  # 并发请求数量
 
+time_start = time.time()
+
+start_time = 0
 for _ in range(num_requests):
-    t = threading.Thread(target=send_request)
+    # start_time = start_time + 1
+    start_time = 0 # random.uniform(0, 1)
+    t = threading.Thread(target=send_request, args=(start_time,))
     t.start()
     threads.append(t)
 
@@ -77,6 +153,12 @@ for _ in range(num_requests):
 for t in threads:
     t.join()
 
+end_time = time.time()
+
+total_time = (end_time - time_start)
+qps = num_requests/total_time
+print(qps)
+
 # 打印所有响应
 for i, resp in enumerate(responses, 1):
-    print(f"请求 {i} 结果:", resp)
+    print(f"请求 {i} 结果: {resp.status_code, resp.text[:128]}")
