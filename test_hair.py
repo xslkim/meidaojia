@@ -137,7 +137,7 @@ def send_request(start_time):
 
 # 创建并启动多个线程
 threads = []
-num_requests = 80  # 并发请求数量
+num_requests = 10  # 并发请求数量
 
 time_start = time.time()
 
@@ -157,7 +157,7 @@ end_time = time.time()
 
 total_time = (end_time - time_start)
 qps = num_requests/total_time
-print(qps)
+print(f"num_requests:{num_requests} total_time:{total_time} qps:{qps}")
 
 # 打印所有响应
 for i, resp in enumerate(responses, 1):
