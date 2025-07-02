@@ -195,6 +195,7 @@ def call_remote_gpu_server(task_data_str, server=None):
         server = get_remote_gpu_server()
 
     result_str = ''
+    result_status_code = '200'
     if server:
         headers = {
             'Content-Type': 'application/json'
@@ -257,6 +258,10 @@ def call_remote_gpu_server(task_data_str, server=None):
                 result['process_time_ms'] = (end_ms - start_ms)
                 server_log_event(server['name'], "GpuServer_Response", result, True)
                 result_str = json.dumps(result)
+                result_status_code = '200'
+                if 'state' in result:
+                    if result['state'] != 0:
+                        result_status_code = '500'
             else:
                 result = {
                     "state":-1,
@@ -264,6 +269,7 @@ def call_remote_gpu_server(task_data_str, server=None):
                     'msg': f'status_code error{response.status_code} call_remote_gpu_server{url} {response.text}'
                 }
                 result_str = json.dumps(result)
+                result_status_code = str(response.status_code)
                 server_log_event(server['name'], f"error GpuServer_Response ", result, False)
         except Exception as e:
             logger.info(f"End call Exception {url} {type(e).__name__}, 错误信息: {e}")
@@ -273,6 +279,7 @@ def call_remote_gpu_server(task_data_str, server=None):
                 'msg': f'Exception call call_remote_gpu_server{url}'
             }
             result_str = json.dumps(result)
+            result_status_code = '500'
             server_log_event(server['name'], f"error GpuServer_Response ", result, False)
 
         logger.info(f"End call {url}")
@@ -287,9 +294,13 @@ def call_remote_gpu_server(task_data_str, server=None):
             "data":"",
             'msg': f'Timeout after all gpu server is busy'
         })
+        result_status_code = '500'
     
     result_key = f"result_{key}"
     redis_conn.set(result_key, result_str, ex=60)
+    result_status_key = f"result_status_code_{key}"
+    redis_conn.set(result_status_key, result_status_code, ex=60)
+    
 
 def check_server_work_call(server):
     task_data = {}
@@ -370,13 +381,22 @@ if __name__ == '__main__':
 
     # registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
     # # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+
     registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
+
     # registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
     # registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
     # # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
 
-    registerGpuServer("new_server3_1_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
+
+
+
+    # registerGpuServer("meidaojia1_1_693442054299653", "https://693442054299653-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("meidaojia2_1_693442054299653", "https://693442054299653-http-8801.northwest1.gpugeek.com:8443", True)
+
+    # registerGpuServer("meidaojia2_1_693413824479237", "https://693413824479237-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer("meidaojia2_2_693413824479237", "https://693413824479237-http-8801.northwest1.gpugeek.com:8443", True)
     
 
     

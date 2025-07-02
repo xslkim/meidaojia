@@ -110,10 +110,11 @@ def api_hairColor_v2():
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
+    result_status_key = f"result_status_code_{key}"
     while (datetime.now() - start_time).seconds < timeout:
         if redis_conn.exists(result_key):
             result_str = redis_conn.get(result_key)
-            return result_str, 200, {'Content-Type': 'application/json'}
+            return result_str, int(redis_conn.get(result_status_key)), {'Content-Type': 'application/json'}
         time.sleep(0.1) 
 
     logger.error(f"request hairColor time out ")
@@ -160,10 +161,11 @@ def api_swapHair_v1():
     timeout = DEFAULT_TIMEOUT
     start_time = datetime.now()
     result_key = f"result_{key}"
+    result_status_key = f"result_status_code_{key}"
     while (datetime.now() - start_time).seconds < timeout:
         if redis_conn.exists(result_key):
             result_str = redis_conn.get(result_key)
-            return result_str, 200, {'Content-Type': 'application/json'}
+            return result_str, int(redis_conn.get(result_status_key)), {'Content-Type': 'application/json'}
         time.sleep(0.1) 
 
     logger.error(f"request /api/swapHair/v1 time out")
