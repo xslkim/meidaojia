@@ -1,5 +1,6 @@
 import requests
 import time
+import base64
 import random
 import string
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -52,6 +53,10 @@ class RequestCounter:
 
 counter = RequestCounter()
 
+def generate_random_task_id(length=19):
+    """生成随机task_id"""
+    digits = string.digits
+    return ''.join(random.choice(digits) for _ in range(length))
 
 def send_request(url, headers, data):
     """发送单个请求"""
@@ -60,6 +65,8 @@ def send_request(url, headers, data):
         counter.increment_sent()
         counter.increment_in_progress()
         
+        # 每次请求生成新的随机task_id
+        data["task_id"] = generate_random_task_id()
         response = requests.post(url, headers=headers, json=data)
         
         # 根据响应状态更新计数器
@@ -138,6 +145,38 @@ def run_test(url, headers, data, qps, duration, concurrency):
     print(f"Target QPS: {qps}")
     print(f"Concurrency: {concurrency}")
 
+
+def image_to_base64(file_path, mime_type=None):
+    """
+    将图片文件转换为带Base64前缀的Data URI字符串
+    
+    参数:
+        file_path (str): 图片文件路径
+        mime_type (str): 可选，指定MIME类型。如果为None，则根据文件扩展名自动判断
+    
+    返回:
+        str: 带Base64前缀的Data URI字符串
+    """
+    # 如果没有指定MIME类型，根据文件扩展名推断
+    if mime_type is None:
+        extension = file_path.split('.')[-1].lower()
+        mime_types = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'bmp': 'image/bmp'
+        }
+        mime_type = mime_types.get(extension, 'application/octet-stream')
+    
+    # 读取文件内容并编码为Base64
+    with open(file_path, 'rb') as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+    
+    # 组合成Data URI格式
+    return f"data:{mime_type};base64,{encoded_string}"
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='API Load Test Tool')
     parser.add_argument('--qps', type=float, default=1, help='Requests per second (per thread)')
@@ -147,16 +186,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 配置请求参数
-    url = 'http://mq.aidigifi.meidaojia.com/hairColor/v2'
-    # url = 'https://692139771842565-http-8801.northwest1.gpugeek.com:8443/hairColor/v2'
+    url = 'http://mq.aidigifi.meidaojia.com/api/swapHair/v1'
     headers = {'Content-Type': 'application/json'}
-    data =  {
-        "img": "data:image/jpeg;base64,/9j/4AAQSkZJ....Euy+sn/oZrKn8CPlK2qR/9k=",
-        "userId": "18701620166",
-        "rgb":[77,99,0],
-        "ratio": 0.9,
+    data = {
+        "hair_id": "1907651680352395265",
+        "task_id": "1907651680352395265",  # 会被每次请求覆盖
+        "user_img_path": "https://cdn.meidaojia.com/ZoeFiles/user2_1_%E5%89%AF%E6%9C%AC.JPG",
+        "is_hr": "false",
         "output_format": "base64"
     }
+
+    img64_str = image_to_base64("aaa.jpg")
+    data['img'] = img64_str
     
     print(f"Starting test with QPS={args.qps}, duration={args.duration}s, concurrency={args.concurrency}")
     run_test(url, headers, data, args.qps, args.duration, args.concurrency)
