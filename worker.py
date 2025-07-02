@@ -25,8 +25,15 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # 设置 logger 的级别
 
+
+# 获取当前日期和时间
+now = datetime.now()
+
+# 格式化为字符串（例如：2023-10-25 14:30:45）
+date_time_str = now.strftime("%Y-%m-%d_%H:%M:%S")
+
 # 创建文件 handler
-file_handler = logging.FileHandler('/var/log/meidaojia/worker.log')
+file_handler = logging.FileHandler(f'/var/log/meidaojia/worker_{date_time_str}.log')
 file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(file_formatter)
@@ -364,10 +371,12 @@ if __name__ == '__main__':
     # registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
     # # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
     registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
     # registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
     # registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
     # # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
+
+    registerGpuServer("new_server3_1_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
     
 
     

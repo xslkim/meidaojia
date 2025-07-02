@@ -11,8 +11,15 @@ from config import QUEUE_NAME, DEFAULT_TIMEOUT, KEY_QUEUE_LOCK_NAME, acquire_loc
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # 设置 logger 的级别
 
+
+# 获取当前日期和时间
+now = datetime.now()
+
+# 格式化为字符串（例如：2023-10-25 14:30:45）
+date_time_str = now.strftime("%Y-%m-%d_%H:%M:%S")
+
 # 创建文件 handler
-file_handler = logging.FileHandler('/var/log/meidaojia/app.log')
+file_handler = logging.FileHandler(f'/var/log/meidaojia/app_{date_time_str}.log')
 file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(file_formatter)
