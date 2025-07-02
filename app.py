@@ -54,7 +54,7 @@ def pushStr2Queue(key, data_str):
     lock = acquire_lock(redis_conn, KEY_QUEUE_LOCK_NAME)
     if lock:
         try:
-            redis_conn.set(key, data_str)
+            redis_conn.set(key, data_str, ex=60)
             key_queue_str = redis_conn.get(QUEUE_NAME).decode("utf-8")
             key_queue = json.loads(key_queue_str)
             key_queue.append(key)
