@@ -263,11 +263,15 @@ def call_remote_gpu_server(task_data_str, server=None):
                     if result['state'] != 0:
                         result_status_code = '500'
             else:
-                result = {
-                    "state":-1,
-                    "data":"",
-                    'msg': f'status_code error{response.status_code} call_remote_gpu_server{url} {response.text}'
-                }
+                try:
+                    result = response.json()
+                except json.JSONDecodeError:
+                    result = {
+                        "state":-1,
+                        "data":"",
+                        'msg': f'status_code error{response.status_code} call_remote_gpu_server{url} {response.text}'
+                    }
+                
                 result_str = json.dumps(result)
                 result_status_code = str(response.status_code)
                 server_log_event(server['name'], f"error GpuServer_Response ", result, False)
@@ -372,31 +376,49 @@ def main_worker():
         # check_server_work()
         time.sleep(0.1)
 
+serverindex = 0
+def regServer(instance):
+    global serverindex
+    registerGpuServer(f"s{serverindex}_1_{instance}", f"https://{instance}-http-8801.northwest1.gpugeek.com:8443", True)
+    registerGpuServer(f"s{serverindex}_2_{instance}", f"https://{instance}-http-8801.northwest1.gpugeek.com:8443", True)
+    serverindex += 1
+
 if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
-    # registerGpuServer("old_server", "http://js1.blockelite.cn:28559", False)
-    # registerGpuServer("test_server", "http://43.143.205.217:5000", False)
 
-    # registerGpuServer("new_server1_692139771842565", "https://692139771842565-http-8801.northwest1.gpugeek.com:8443", True)
-    # # registerGpuServer("new_server2_692493464571909", "https://692493464571909-http-8801.northwest1.gpugeek.com:8443", True)
+    # regServer('693413824479237')
+    # regServer('693442054299653')
+    
+    regServer('693565319933957')
+    regServer('693565452951557')
+    # regServer('693565557084165')
+    # regServer('693570664882181')
+    # regServer('693570752139269')
+    # regServer('693573706682373')
+    # regServer('693573774479365')
+    
+    
+    # regServer('693574955724805')
+    # regServer('693575032029189')
+    # regServer('693577527365637')
+    # regServer('693577626185733')
+    # regServer('693577753862149')
+    # regServer('693577880313861')
+    # regServer('693578025705477')
 
-    registerGpuServer("new_server3_692502023221253", "https://692502023221253-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer("new_server4_692517520904197", "https://692517520904197-http-8801.northwest1.gpugeek.com:8443", True)
 
-    # registerGpuServer("new_server5_692517668192261", "https://692517668192261-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("new_server6_692524911165445", "https://692524911165445-http-8801.northwest1.gpugeek.com:8443", True)
-    # # registerGpuServer("new_server7_692526281285637", "https://692526281285637-http-8801.northwest1.gpugeek.com:8443", True)
-
-
-
-
-    # registerGpuServer("meidaojia1_1_693442054299653", "https://693442054299653-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("meidaojia2_1_693442054299653", "https://693442054299653-http-8801.northwest1.gpugeek.com:8443", True)
-
-    # registerGpuServer("meidaojia2_1_693413824479237", "https://693413824479237-http-8801.northwest1.gpugeek.com:8443", True)
-    # registerGpuServer("meidaojia2_2_693413824479237", "https://693413824479237-http-8801.northwest1.gpugeek.com:8443", True)
+    # regServer('693579093471237')
+    # regServer('693579634159621')
+    # regServer('693594143621125')
+    # regServer('693594319818757')
+    # regServer('693595168616453')
+    # regServer('693595248599045')
+    # regServer('693596213850117')
+    # regServer('693596619751429')
+    # regServer('693597082546181')
+    # regServer('693597199511557')
     
 
     
