@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # 启动Flask应用，启用多线程处理
     monitor.run(
         host='0.0.0.0',
-        port=5000,
+        port=5001,
         threaded=True,  # 启用多线程处理并发请求
         debug=False    # 生产环境应设置为False
     )

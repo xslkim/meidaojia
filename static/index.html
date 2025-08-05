@@ -246,7 +246,7 @@
         // 获取服务器状态数据
         async function fetchServerStatus() {
             try {
-                const response = await fetch('http://152.136.62.72:5000/get_server_state');
+                const response = await fetch('http://182.92.195.47:5001/get_server_state');
                 if (!response.ok) throw new Error('网络响应不正常');
                 return await response.json();
             } catch (error) {

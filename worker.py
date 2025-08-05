@@ -20,6 +20,7 @@ from config import KEY_QUEUE_LOCK_NAME, acquire_lock, SERVER_LIST_LOCK_NAME, SER
 import copy
 
 import logging
+import csv
 
 # 创建 logger
 logger = logging.getLogger(__name__)
@@ -271,12 +272,13 @@ def call_remote_gpu_server(task_data_str, server=None):
                         "data":"",
                         'msg': f'status_code error{response.status_code} call_remote_gpu_server{url} {response.text}'
                     }
-                
+                time.sleep(1)
                 result_str = json.dumps(result)
                 result_status_code = str(response.status_code)
                 server_log_event(server['name'], f"error GpuServer_Response ", result, False)
         except Exception as e:
             logger.info(f"End call Exception {url} {type(e).__name__}, 错误信息: {e}")
+            time.sleep(1)
             result = {
                 "state":-1,
                 "data":"",
@@ -380,46 +382,47 @@ serverindex = 0
 def regServer(instance):
     global serverindex
     registerGpuServer(f"s{serverindex}_1_{instance}", f"https://{instance}-http-8801.northwest1.gpugeek.com:8443", True)
-    registerGpuServer(f"s{serverindex}_2_{instance}", f"https://{instance}-http-8801.northwest1.gpugeek.com:8443", True)
+    # registerGpuServer(f"s{serverindex}_2_{instance}", f"https://{instance}-http-8801.northwest1.gpugeek.com:8443", True)
     serverindex += 1
+
+def get_server_names(csv_file='servers.csv'):
+    """
+    从servers.csv文件中提取所有主机名称
+    
+    参数:
+        csv_file (str): CSV文件路径，默认为'servers.csv'
+        
+    返回:
+        list: 包含所有主机名称的列表
+    """
+    server_names = []
+    
+    try:
+        with open(csv_file, mode='r', encoding='utf-8') as file:
+            csv_reader = csv.reader(file)
+            for row in csv_reader:
+                if row:  # 确保不是空行
+                    # 取第一列并去除前后空格
+                    server_name = row[0].strip()
+                    if server_name:  # 确保名称不为空
+                        server_names.append(server_name)
+    except FileNotFoundError:
+        print(f"错误：文件 {csv_file} 未找到")
+    except Exception as e:
+        print(f"读取文件时出错: {e}")
+    
+    return server_names
 
 if __name__ == '__main__':
     import os
     print(f"[Worker] Starting with PID: {os.getpid()}")
     redis_conn.set(GPU_SERVER_LIST, "[]")
 
-    # regServer('693413824479237')
-    # regServer('693442054299653')
-    
-    regServer('693565319933957')
-    regServer('693565452951557')
-    # regServer('693565557084165')
-    # regServer('693570664882181')
-    # regServer('693570752139269')
-    # regServer('693573706682373')
-    # regServer('693573774479365')
-    
-    
-    # regServer('693574955724805')
-    # regServer('693575032029189')
-    # regServer('693577527365637')
-    # regServer('693577626185733')
-    # regServer('693577753862149')
-    # regServer('693577880313861')
-    # regServer('693578025705477')
+   
+    # servers = get_server_names()
+    # for s in servers:
+    #     regServer(s)
+    regServer("693570664882181")
+    regServer("693565557084165")
 
-
-    # regServer('693579093471237')
-    # regServer('693579634159621')
-    # regServer('693594143621125')
-    # regServer('693594319818757')
-    # regServer('693595168616453')
-    # regServer('693595248599045')
-    # regServer('693596213850117')
-    # regServer('693596619751429')
-    # regServer('693597082546181')
-    # regServer('693597199511557')
-    
-
-    
     main_worker()
